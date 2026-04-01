@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alabofur"
+version = "0.1.0"
+description = "Simple CLI bandwidth shaper with tc, inspired by wondershaper"
+authors = [{name = "Tuncay Bahadır", email = "tuncaybahadir@protonmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+alabofur = "alabofur.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["alabofur"]
+
+[tool.setuptools.package-data]
+alabofur = ["*.service", "man/*"]

@@ -1,0 +1,84 @@
+.TH ALABOFUR 1 "April 2026" "alabofur 0.1.0"
+.SH NAME
+alabofur \- simple tc-based bandwidth shaper with ufw-like UX
+.SH SYNOPSIS
+.B alabofur
+.RI command " [options]"
+.br
+.B alabofur add
+.I IFACE DOWNLOAD_MB UPLOAD_MB
+.br
+.B alabofur deny
+.I IFACE
+.br
+.B alabofur clear
+.I IFACE
+.br
+.B alabofur list
+.RI [IFACE...]
+.br
+.B alabofur apply
+.RI [IFACE...]
+.br
+.B alabofur configtest
+.br
+.B alabofur install-service
+.RI [--force]
+.br
+.B alabofur start|stop|restart|status
+.SH DESCRIPTION
+.B alabofur
+applies upload/download limits per network interface using Linux
+.BR tc (8)
+with the same simplicity as
+.BR ufw (8) .
+Configuration lives in
+.IR /etc/alabofur/alabofur.conf
+and optional
+.IR /etc/alabofur/*.conf
+files for additional interfaces.
+.SH COMMANDS
+.TP
+.B add IFACE DOWNLOAD_MB UPLOAD_MB
+Write interface config and apply limits. Use
+.B --ipv4-only
+to skip IPv6 filters.
+.TP
+.B deny IFACE
+Apply near-zero (1 Mbit) limits to effectively block traffic.
+.TP
+.B clear IFACE
+Remove shaping rules for the interface.
+.TP
+.B list [IFACE...]
+Show configured limits and current tc qdisc state.
+.TP
+.B apply [IFACE...]
+Apply limits from config files (used by systemd service).
+.TP
+.B configtest
+Validate configuration files.
+.TP
+.B install-service [--force]
+Install systemd unit at
+.IR /etc/systemd/system/alabofur.service
+and enable it.
+.TP
+.B start|stop|restart|status
+Manage the systemd service.
+.SH FILES
+.TP
+.I /etc/alabofur/alabofur.conf
+Default configuration file. Each section name is the interface name and must define
+.B download_mbit
+and
+.B upload_mbit .
+.TP
+.I /etc/alabofur/*.conf
+Optional per-interface configuration files.
+.SH AUTHOR
+Tuncay Bahadır <tuncaybahadir@protonmail.com>
+.SH SEE ALSO
+.BR tc (8),
+.BR ip (8),
+.BR systemctl (1)
