@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alabofur"
-version = "0.1.0"
+version = "0.1.1"
 description = "Simple CLI bandwidth shaper with tc, inspired by wondershaper"
 authors = [{name = "Tuncay Bahadır", email = "tuncaybahadir@protonmail.com"}]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []

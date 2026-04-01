@@ -16,7 +16,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install --upgrade build
 python3 -m build
-pip install dist/alabofur-0.1.0-py3-none-any.whl
+pip install dist/alabofur-0.1.1-py3-none-any.whl
 ```
 
 Install and enable the service:
@@ -28,10 +28,10 @@ sudo systemctl start alabofur
 ### Debian/Ubuntu (deb) and RPM packaging
 Build artifacts via `python3 -m build`; then package with `fpm` or your distro tooling:
 ```bash
-fpm -s python -t deb dist/alabofur-0.1.0-py3-none-any.whl
-fpm -s python -t rpm dist/alabofur-0.1.0-py3-none-any.whl
+fpm -s python -t deb dist/alabofur-0.1.1-py3-none-any.whl
+fpm -s python -t rpm dist/alabofur-0.1.1-py3-none-any.whl
 ```
-For Launchpad upload, use the sdist `dist/alabofur-0.1.0.tar.gz`. For GitHub Releases, attach the wheel and sdist.
+For Launchpad upload, use the sdist `dist/alabofur-0.1.1.tar.gz`. For GitHub Releases, attach the wheel and sdist.
 
 ## Configuration
 Default file: `/etc/alabofur/alabofur.conf`. Additional per-interface files: `/etc/alabofur/*.conf`.
