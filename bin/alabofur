@@ -243,7 +243,7 @@ cmd_service_run() {
 
 usage() {
     cat <<EOF
-$PROG $VERSION - simple bandwidth shaper (ufw-like UX)
+$PROG $VERSION - simple bandwidth shaper
 
 Usage: $PROG <command> [args]
 
