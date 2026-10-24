@@ -185,15 +185,7 @@ to quit). `USE` is the share of the configured limit in use, `DROPS` the
 packets dropped by shaping; traffic that is not tied to a TCP socket (UDP,
 packet headers) is shown as `(other)`:
 
-```console
-$ sudo alabofur top
-IFACE    STATE            DOWN            UP  LIMIT         USE            DROPS
-eth0     up        18.6 Mbit/s    373 kbit/s  20/5 mbit     ███████░  93%  0
-
-PROCESS                  DOWN            UP  CONNS  TOP PEER
-curl              17.9 Mbit/s      0 kbit/s      1  185.125.190.37:443
-(other)            716 kbit/s    373 kbit/s      -  -
-```
+![alabofur top](docs/alabofur-top.png)
 
 Throttle an interface to near-zero (1/1 Mbit):
 
