@@ -5,7 +5,7 @@
 name: alabofur
 arch: all
 platform: linux
-version: "1.0.1"
+version: "1.0.2"
 section: net
 priority: optional
 maintainer: Tuncay Bahadir <tuncaybahadir@protonmail.com>
