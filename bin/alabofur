@@ -172,6 +172,7 @@ cmd_add() {
     done
     [ -n "$_iface" ] && [ -n "$_dl" ] && [ -n "$_ul" ] || \
         die "usage: $PROG add <interface> <download_mbit> <upload_mbit> [--ipv4-only]"
+    ensure_iface "$_iface"
     case "$_dl$_ul" in *[!0-9]*) die "download and upload must be integers (mbit)";; esac
 
     install_dependencies || return 1
@@ -184,6 +185,7 @@ cmd_deny() {
     require_root
     _iface=${1:-}
     [ -n "$_iface" ] || die "usage: $PROG deny <interface>"
+    ensure_iface "$_iface"
     install_dependencies || return 1
     save_interface_config "$_iface" 1 1 true >/dev/null
     printf 'set %s to minimal bandwidth (deny)\n' "$_iface"
@@ -194,6 +196,7 @@ cmd_clear() {
     require_root
     _iface=${1:-}
     [ -n "$_iface" ] || die "usage: $PROG clear <interface>"
+    ensure_iface "$_iface"
     install_dependencies || return 1
     tc_clear "$_iface"
     printf 'cleared shaping for %s\n' "$_iface"
