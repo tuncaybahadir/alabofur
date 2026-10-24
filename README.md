@@ -5,6 +5,8 @@ ships with a systemd service so limits persist across reboot. Needs a Linux with
 `systemd`; the required `iproute2`/`kmod` packages are auto-installed when
 missing. Language: English.
 
+![alabofur help screen](docs/alabofur-help.png)
+
 ## Supported distributions
 
 - Ubuntu 20.04, 22.04, 24.04, 26.04 (deb)
