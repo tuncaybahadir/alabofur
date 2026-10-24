@@ -242,7 +242,7 @@ cmd_service_run() {
 }
 
 # banner
-# Print the slanted ALABOFUR logo shown above the help text. Only drawn on a
+# Print the ALABOFUR logo shown above the help text. Only drawn on a
 # UTF-8 terminal, so pipes, scripts and plain consoles get the bare usage.
 # Uses 24-bit colour when COLORTERM advertises it, else the nearest
 # 256-colour codes; NO_COLOR keeps the logo but drops the colours.
@@ -274,14 +274,13 @@ banner() {
                 rule = "75"
             }
             reset = (mode == "none") ? "" : "\033[0m"
-            width = 78
+            width = 73
         }
         {
             line = $0
             gsub(/(█)+/, color(face[NR]) "&", line)
             gsub(/(╗|╔|═|╝|║|╚)+/, color(shade[NR]) "&", line)
-            # shift upper rows right so the logo leans like italics
-            printf("%s%s%s\n", substr("     ", 1, 6 - NR), line, reset)
+            printf("%s%s\n", line, reset)
         }
         END {
             printf("%s", color(rule))
