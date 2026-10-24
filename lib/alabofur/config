@@ -100,17 +100,23 @@ load_all_configs() {
 # save_interface_config IFACE DOWNLOAD UPLOAD IPV6
 #
 # Write a per-interface config file at CONF_DIR/<iface>.conf and print its path.
+# Runs under umask 077 so a new CONF_DIR is 0700 and the file 0600 regardless
+# of the caller's umask; an existing file is tightened to 0600 as well.
 save_interface_config() {
     _iface=$1; _dl=$2; _ul=$3; _ipv6=$4
     ensure_iface "$_iface"
-    mkdir -p "$CONF_DIR"
     _path="$CONF_DIR/$_iface.conf"
-    {
-        printf '[%s]\n' "$_iface"
-        printf 'download_mbit = %s\n' "$_dl"
-        printf 'upload_mbit = %s\n' "$_ul"
-        printf 'ipv6 = %s\n' "$_ipv6"
-    } > "$_path"
+    (
+        umask 077
+        mkdir -p "$CONF_DIR" || exit 1
+        {
+            printf '[%s]\n' "$_iface"
+            printf 'download_mbit = %s\n' "$_dl"
+            printf 'upload_mbit = %s\n' "$_ul"
+            printf 'ipv6 = %s\n' "$_ipv6"
+        } > "$_path" || exit 1
+        chmod 0600 "$_path"
+    ) || die "cannot write $_path"
     printf '%s\n' "$_path"
 }
 
