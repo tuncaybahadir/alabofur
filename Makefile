@@ -27,6 +27,7 @@ install:
 	$(INSTALL) -m 0644 lib/alabofur/common     $(DESTDIR)$(LIBDIR)/common
 	$(INSTALL) -m 0644 lib/alabofur/config     $(DESTDIR)$(LIBDIR)/config
 	$(INSTALL) -m 0644 lib/alabofur/tc         $(DESTDIR)$(LIBDIR)/tc
+	$(INSTALL) -m 0644 lib/alabofur/stats      $(DESTDIR)$(LIBDIR)/stats
 	$(INSTALL) -m 0644 share/alabofur/alabofur.service $(DESTDIR)$(SHAREDIR)/alabofur.service
 	$(INSTALL) -m 0644 share/man/man1/alabofur.1       $(DESTDIR)$(MANDIR)/alabofur.1
 
@@ -38,7 +39,7 @@ uninstall:
 
 # Static analysis (requires shellcheck).
 check:
-	shellcheck -s sh bin/alabofur lib/alabofur/common lib/alabofur/config lib/alabofur/tc
+	shellcheck -s sh bin/alabofur lib/alabofur/common lib/alabofur/config lib/alabofur/tc lib/alabofur/stats
 
 # Build a .deb / .rpm with nfpm (https://nfpm.goreleaser.com).
 deb:
