@@ -205,6 +205,10 @@ Disable IPv6 ingress filters for an interface:
 $ sudo alabofur add eth0 50 10 --ipv4-only
 ```
 
+## Security
+
+To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+
 ## Support
 
 If you find alabofur useful, you can support its development:
