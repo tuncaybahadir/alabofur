@@ -27,7 +27,7 @@ sudo apt update && sudo apt install alabofur
 ### Ubuntu (PPA)
 
 Ubuntu users can alternatively install from the Launchpad PPA (built for Ubuntu
-20.04, 22.04 and 24.04):
+20.04, 22.04, 24.04 and 26.04):
 
 ```bash
 sudo add-apt-repository ppa:tuncaybahadirr/alabofur
