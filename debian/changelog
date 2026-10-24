@@ -1,3 +1,17 @@
+alabofur (1.0.2) jammy; urgency=medium
+
+  * Security hardening (GitHub issue #1):
+    - validate interface names before passing them to tc/ip or using them
+      as config file names;
+    - write config files under umask 077 (directory 0700, files 0600);
+    - use mktemp for captured command stderr instead of a fixed name;
+    - add SECURITY.md with a vulnerability reporting process;
+    - run shellcheck in the release workflow before building.
+  * Show a coloured banner above the help text on UTF-8 terminals.
+  * Drop the Snap packaging.
+
+ -- Tuncay Bahadır <tuncaybahadir@protonmail.com>  Sat, 24 Oct 2026 13:00:00 +0000
+
 alabofur (1.0.1) jammy; urgency=medium
 
   * New upstream release.
