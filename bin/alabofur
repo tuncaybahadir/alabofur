@@ -171,8 +171,9 @@ cmd_add() {
                 ;;
         esac
     done
-    [ -n "$_iface" ] && [ -n "$_dl" ] && [ -n "$_ul" ] || \
+    if [ -z "$_iface" ] || [ -z "$_dl" ] || [ -z "$_ul" ]; then
         die "usage: $PROG add <interface> <download_mbit> <upload_mbit> [--ipv4-only]"
+    fi
     ensure_iface "$_iface"
     case "$_dl$_ul" in *[!0-9]*) die "download and upload must be integers (mbit)";; esac
 
