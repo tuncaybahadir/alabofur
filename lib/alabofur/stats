@@ -1,0 +1,243 @@
+# shellcheck shell=sh
+# alabofur - live traffic statistics
+#
+# Copyright (c) 2026 Tuncay Bahadır <tuncaybahadir@protonmail.com>
+# License: MIT
+#
+# Interface rates come from /sys/class/net/<iface>/statistics, shaping drops
+# from `tc -s qdisc` and per-process usage from the TCP byte counters that
+# `ss -ti` reports. UDP sockets have no byte counters, so that traffic is
+# shown as the remainder of the interface totals.
+#
+# Requires the common and config modules to be sourced first.
+
+# stats_iface_line WITH_DROPS IFACE
+#
+# Print one "I\t<iface>\t<state>\t<rx_bytes>\t<tx_bytes>\t<drops>" record.
+# drops is the packet count dropped by the shaping qdiscs of IFACE and its
+# ifb mirror, or "-" when WITH_DROPS is not 1.
+stats_iface_line() {
+    _sd=/sys/class/net/$2
+    [ -d "$_sd" ] || return 0
+    read -r _sst < "$_sd/operstate" || _sst=unknown
+    read -r _srx < "$_sd/statistics/rx_bytes" || _srx=0
+    read -r _stx < "$_sd/statistics/tx_bytes" || _stx=0
+    _sdr=-
+    if [ "$1" = 1 ]; then
+        _sdr=$({ tc -s qdisc show dev "$2"; tc -s qdisc show dev "ifb-$2"; } 2>/dev/null |
+            awk '{ for (i = 1; i < NF; i++) if ($i == "(dropped") d += $(i + 1) } END { print d + 0 }')
+    fi
+    printf 'I\t%s\t%s\t%s\t%s\t%s\n' "$2" "$_sst" "$_srx" "$_stx" "$_sdr"
+}
+
+# stats_snapshot WITH_TCP [IFACE...]
+#
+# Emit one measurement for stats_render: an "S\t<uptime>" line, one interface
+# record per IFACE (default: every interface except loopback, ifb mirrors and
+# veth container ends) and, when WITH_TCP is 1, every `ss -tinp` line as
+# "T\t<line>" plus the shaping drop counters.
+stats_snapshot() {
+    _stcp=$1; shift
+    read -r _sup _ < /proc/uptime
+    printf 'S\t%s\n' "$_sup"
+    if [ "$#" -eq 0 ]; then
+        for _sp in /sys/class/net/*; do
+            _si=${_sp##*/}
+            case "$_si" in lo|ifb*|veth*|'*') continue ;; esac
+            stats_iface_line "$_stcp" "$_si"
+        done
+    else
+        for _si in "$@"; do
+            stats_iface_line "$_stcp" "$_si"
+        done
+    fi
+    if [ "$_stcp" = 1 ]; then
+        ss -tinp 2>/dev/null | awk '{ print "T\t" $0 }'
+    fi
+}
+
+# stats_limits
+#
+# Print "L\t<iface>\t<download_mbit>\t<upload_mbit>" for every configured
+# interface, or a single "L\t?" line when the config is not readable.
+stats_limits() {
+    if ! check_conf_readable 2>/dev/null; then
+        printf 'L\t?\n'
+        return 0
+    fi
+    load_all_configs 2>/dev/null | awk -F "$(printf '\t')" 'NF >= 3 { print "L\t" $1 "\t" $2 "\t" $3 }'
+}
+
+# stats_render STYLE MODE UTF8 [EOL]
+#
+# Read two snapshots plus stats_limits output on stdin and print either the
+# compact interface list shown under the banner (STYLE banner) or the full
+# `alabofur top` screen (STYLE top). MODE is the colour mode (24, 256 or
+# none), UTF8 is 1 to use arrows and block bars, EOL is appended to every
+# line (top uses an erase-to-end-of-line code to redraw in place).
+stats_render() {
+    awk -v style="$1" -v mode="$2" -v utf="$3" -v eol="${4:-}" -v root="$(id -u)" '
+        function paint(name, s) {
+            if (mode == "none") return s
+            return ((mode == "24") ? "\033[38;2;" c24[name] "m" : "\033[38;5;" c256[name] "m") s "\033[0m"
+        }
+        function dim(s) { return (mode == "none") ? s : "\033[2m" s "\033[0m" }
+        function rate(bps) {
+            if (bps >= 1e9) return sprintf("%.1f Gbit/s", bps / 1e9)
+            if (bps >= 1e6) return sprintf("%.1f Mbit/s", bps / 1e6)
+            return sprintf("%.0f kbit/s", bps / 1e3)
+        }
+        function pad(s, w) { while (length(s) < w) s = s " "; return s }
+        function lpad(s, w) { while (length(s) < w) s = " " s; return s }
+        function out(s) { printf("%s%s\n", s, eol) }
+        function state(k,   s) {
+            s = pad(st[k], 7)
+            if (st[k] == "up") return paint("green", s)
+            if (st[k] == "down") return paint("red", s)
+            return dim(s)
+        }
+
+        # one `ss -tinp` line: a socket line, or the indented info line with
+        # the byte counters of the socket line before it
+        function sock(n, line,   f, i, nf, rxv, txv) {
+            if (line ~ /^[ \t]/) {
+                if (cur == "") return
+                nf = split(line, f, /[ \t]+/)
+                rxv = 0; txv = 0
+                for (i = 1; i <= nf; i++) {
+                    if (f[i] ~ /^bytes_received:/) rxv = substr(f[i], 16) + 0
+                    else if (f[i] ~ /^bytes_acked:/) txv = substr(f[i], 13) + 0
+                }
+                srx[n, cur] = rxv; stx[n, cur] = txv
+                if (n == 2) keys[++nk] = cur
+                cur = ""
+                return
+            }
+            split(line, f, /[ \t]+/)
+            cur = ""
+            if (f[1] == "State" || f[5] == "") return
+            if (f[4] ~ /^(127\.|\[::1\]|\[::ffff:127\.)/ || f[5] ~ /^(127\.|\[::1\]|\[::ffff:127\.)/) return
+            cur = f[4] " " f[5]
+            if (n == 2) {
+                peer[cur] = f[5]
+                proc[cur] = "(unknown)"
+                if (match(line, /users:\(\("[^"]*"/)) proc[cur] = substr(line, RSTART + 9, RLENGTH - 10)
+            }
+        }
+
+        BEGIN {
+            FS = "\t"
+            split("cyan 37;217;255 45 blue 91;140;255 69 green 63;185;80 71 yellow 210;153;34 178 red 248;81;73 203", p, " ")
+            for (i = 1; (i + 2) in p; i += 3) { c24[p[i]] = p[i + 1]; c256[p[i]] = p[i + 2] }
+            down = utf ? "↓" : "v"; up = utf ? "↑" : "^"
+            full = utf ? "█" : "#"; empty = utf ? "░" : "-"
+        }
+        $1 == "S" { n++; t[n] = $2; cur = ""; next }
+        $1 == "I" {
+            if (n == 1) { rx1[$2] = $4; tx1[$2] = $5 }
+            else { ifs[++ni] = $2; st[$2] = $3; rx2[$2] = $4; tx2[$2] = $5; dr[$2] = $6 }
+            next
+        }
+        $1 == "L" { if ($2 == "?") nolim = 1; else { ld[$2] = $3; lu[$2] = $4 }; next }
+        $1 == "T" { sock(n, substr($0, 3)); next }
+
+        END {
+            dt = t[2] - t[1]
+            if (dt <= 0) dt = 1
+            w = 5
+            for (i = 1; i <= ni; i++) {
+                k = ifs[i]
+                rd[k] = (k in rx1) ? (rx2[k] - rx1[k]) * 8 / dt : 0
+                ru[k] = (k in tx1) ? (tx2[k] - tx1[k]) * 8 / dt : 0
+                if (rd[k] < 0) rd[k] = 0
+                if (ru[k] < 0) ru[k] = 0
+                if (st[k] != "down") { totd += rd[k]; totu += ru[k] }
+                if (length(k) > w) w = length(k)
+            }
+            if (style == "banner") show_banner()
+            else show_top()
+        }
+
+        function limit_text(k) {
+            if (k in ld) return "limit " ld[k] "/" lu[k] " mbit"
+            return nolim ? "limit ?" : "no limit"
+        }
+
+        function show_banner(   i, k) {
+            if (ni == 0) return
+            out(dim("Interfaces"))
+            for (i = 1; i <= ni; i++) {
+                k = ifs[i]
+                out("  " pad(k, w) "  " state(k) "  " \
+                    paint("cyan", down " " lpad(rate(rd[k]), 11)) "  " \
+                    paint("blue", up " " lpad(rate(ru[k]), 11)) "  " dim(limit_text(k)))
+            }
+            if (nolim) out(dim("  (run as root to see the configured limits)"))
+            out("")
+        }
+
+        function show_top(   i, j, k, nm, x, y, pc, cells, bar, lim, use, drops, nn, o, tmp, shown, od, ou) {
+            out(paint("cyan", "alabofur top") dim(eol == "" ? "  1 second sample" : "  refresh 1s, q to quit"))
+            out("")
+            out(dim(pad("IFACE", w) "  " pad("STATE", 7) "  " lpad("DOWN", 12) "  " lpad("UP", 12) "  " \
+                pad("LIMIT", 12) "  " pad("USE", 13) "  DROPS"))
+            for (i = 1; i <= ni; i++) {
+                k = ifs[i]
+                lim = (k in ld) ? ld[k] "/" lu[k] " mbit" : (nolim ? "?" : "-")
+                use = pad("-", 13)
+                if ((k in ld) && ld[k] > 0 && lu[k] > 0) {
+                    pc = rd[k] / (ld[k] * 1e6)
+                    if (ru[k] / (lu[k] * 1e6) > pc) pc = ru[k] / (lu[k] * 1e6)
+                    pc = int(pc * 100 + 0.5)
+                    if (pc > 999) pc = 999
+                    cells = int(pc / 12.5 + 0.5)
+                    if (cells > 8) cells = 8
+                    bar = ""
+                    for (j = 0; j < 8; j++) bar = bar ((j < cells) ? full : empty)
+                    use = paint((pc >= 90) ? "red" : (pc >= 70) ? "yellow" : "green", bar) " " lpad(pc "%", 4)
+                }
+                drops = (dr[k] == "-" || dr[k] == "0") ? dim(dr[k]) : paint("red", dr[k])
+                out(pad(k, w) "  " state(k) "  " paint("cyan", lpad(rate(rd[k]), 12)) "  " \
+                    paint("blue", lpad(rate(ru[k]), 12)) "  " pad(lim, 12) "  " use "  " drops)
+            }
+
+            # per-process TCP usage between the two snapshots
+            for (i = 1; i <= nk; i++) {
+                k = keys[i]; nm = proc[k]
+                x = srx[2, k] - (((1, k) in srx) ? srx[1, k] : 0)
+                y = stx[2, k] - (((1, k) in stx) ? stx[1, k] : 0)
+                if (x < 0) x = 0
+                if (y < 0) y = 0
+                if (!(nm in cnt)) names[++nn] = nm
+                cnt[nm]++; pd[nm] += x * 8 / dt; pu[nm] += y * 8 / dt
+                if (x + y >= best[nm]) { best[nm] = x + y; bp[nm] = peer[k] }
+                tcpd += x * 8 / dt; tcpu += y * 8 / dt
+            }
+            for (i = 1; i <= nn; i++) o[i] = names[i]
+            for (i = 1; i <= nn; i++)
+                for (j = i + 1; j <= nn; j++)
+                    if (pd[o[j]] + pu[o[j]] > pd[o[i]] + pu[o[i]]) { tmp = o[i]; o[i] = o[j]; o[j] = tmp }
+
+            out("")
+            out(dim(pad("PROCESS", 15) "  " lpad("DOWN", 12) "  " lpad("UP", 12) "  " lpad("CONNS", 5) "  TOP PEER"))
+            shown = 0
+            for (i = 1; i <= nn && shown < 10; i++) {
+                nm = o[i]
+                if (pd[nm] + pu[nm] < 1) continue
+                shown++
+                out(pad(substr(nm, 1, 15), 15) "  " paint("cyan", lpad(rate(pd[nm]), 12)) "  " \
+                    paint("blue", lpad(rate(pu[nm]), 12)) "  " lpad(cnt[nm], 5) "  " dim(bp[nm]))
+            }
+            if (shown == 0) out(dim("(no TCP traffic)"))
+            od = totd - tcpd; ou = totu - tcpu
+            if (od < 0) od = 0
+            if (ou < 0) ou = 0
+            out(dim(pad("(other)", 15)) "  " paint("cyan", lpad(rate(od), 12)) "  " \
+                paint("blue", lpad(rate(ou), 12)) "  " lpad("-", 5) "  " dim("-"))
+            if (root != 0) {
+                out("")
+                out(dim("run as root to see every process name and the configured limits"))
+            }
+        }
+    '
+}
