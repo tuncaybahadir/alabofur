@@ -1,3 +1,10 @@
+alabofur (1.0.3) jammy; urgency=medium
+
+  * Build the Launchpad PPA for Ubuntu 26.04 (resolute) as well.
+  * Document the supported Ubuntu releases (20.04, 22.04, 24.04, 26.04).
+
+ -- Tuncay Bahadır <tuncaybahadir@protonmail.com>  Sat, 24 Oct 2026 14:30:00 +0000
+
 alabofur (1.0.2) jammy; urgency=medium
 
   * Security hardening (GitHub issue #1):
