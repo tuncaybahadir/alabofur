@@ -17,6 +17,9 @@ alabofur \- simple bandwidth shaper with ufw-like UX
 .B alabofur list
 .RI [IFACE...]
 .br
+.B alabofur top
+.RI [IFACE...]
+.br
 .B alabofur apply
 .RI [IFACE...]
 .br
@@ -50,6 +53,18 @@ Remove shaping rules for the interface.
 .TP
 .B list [IFACE...]
 Show configured limits and current tc qdisc state.
+.TP
+.B top [IFACE...]
+Show live traffic, refreshed every second until
+.B q
+or Ctrl-C: the download/upload rate of every interface (or only the given
+ones), how much of its configured limit is used, packets dropped by shaping,
+and the processes using the most TCP bandwidth with their busiest peer.
+Traffic that cannot be attributed to a TCP socket (UDP, packet headers) is
+shown as
+.BR (other) .
+Run as root to see every process name and the configured limits. Without a
+terminal it prints a single one-second sample.
 .TP
 .B apply [IFACE...]
 Apply limits from config files (used by systemd service).
