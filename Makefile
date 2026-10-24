@@ -8,7 +8,7 @@ BINDIR     := $(PREFIX)/bin
 LIBDIR     := $(PREFIX)/lib/alabofur
 SHAREDIR   := $(PREFIX)/share/alabofur
 MANDIR     := $(PREFIX)/share/man/man1
-VERSION    := 1.0.1
+VERSION    := 1.0.2
 
 INSTALL    ?= install
 
