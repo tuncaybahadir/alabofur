@@ -43,6 +43,8 @@ fi
 . "$ALABOFUR_LIBDIR/config"
 # shellcheck source=lib/alabofur/tc
 . "$ALABOFUR_LIBDIR/tc"
+# shellcheck source=lib/alabofur/stats
+. "$ALABOFUR_LIBDIR/stats"
 
 TAB=$(printf '\t')
 
@@ -241,23 +243,42 @@ cmd_service_run() {
     apply_interfaces "$@"
 }
 
+# ---------------------------------------------------------------------------
+# terminal output
+# ---------------------------------------------------------------------------
+
+# utf8_locale
+# Test whether the current locale uses UTF-8 (needed for block characters).
+utf8_locale() {
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;;
+    esac
+    return 1
+}
+
+# set_color_mode
+# Set COLOR_MODE for stdout: 24 when COLORTERM advertises 24-bit colour, else
+# 256; none for pipes, TERM=dumb or when NO_COLOR is set.
+set_color_mode() {
+    COLOR_MODE=256
+    case "${COLORTERM:-}" in truecolor|24bit) COLOR_MODE=24 ;; esac
+    if [ ! -t 1 ] || [ "${TERM:-dumb}" = "dumb" ] || [ -n "${NO_COLOR:-}" ]; then
+        COLOR_MODE=none
+    fi
+}
+
 # banner
-# Print the ALABOFUR logo shown above the help text. Only drawn on a
-# UTF-8 terminal, so pipes, scripts and plain consoles get the bare usage.
-# Uses 24-bit colour when COLORTERM advertises it, else the nearest
-# 256-colour codes; NO_COLOR keeps the logo but drops the colours.
+# Print the ALABOFUR logo shown above the help text, followed by the live
+# rate of every interface (sampled over one second). Only drawn on a UTF-8
+# terminal, so pipes, scripts and plain consoles get the bare usage.
+# NO_COLOR keeps the logo but drops the colours.
 banner() {
     [ -t 1 ] || return 0
     [ "${TERM:-dumb}" != "dumb" ] || return 0
-    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
-        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
-        *) return 0 ;;
-    esac
-    _mode=256
-    case "${COLORTERM:-}" in truecolor|24bit) _mode=24 ;; esac
-    [ -z "${NO_COLOR:-}" ] || _mode=none
+    utf8_locale || return 0
+    set_color_mode
 
-    awk -v mode="$_mode" '
+    awk -v mode="$COLOR_MODE" '
         function color(c) {
             if (mode == "none") return ""
             return (mode == "24") ? "\033[38;2;" c "m" : "\033[38;5;" c "m"
@@ -312,6 +333,65 @@ banner() {
 ██║  ██║ ███████╗ ██║  ██║ ██████╔╝ ╚██████╔╝ ██║      ╚██████╔╝ ██║  ██║
 ╚═╝  ╚═╝ ╚══════╝ ╚═╝  ╚═╝ ╚═════╝   ╚═════╝  ╚═╝       ╚═════╝  ╚═╝  ╚═╝
 EOF
+
+    _a=$(stats_snapshot 0)
+    sleep 1
+    _b=$(stats_snapshot 0)
+    { printf '%s\n%s\n' "$_a" "$_b"; stats_limits; } | stats_render banner "$COLOR_MODE" 1
+}
+
+# ---------------------------------------------------------------------------
+# live traffic view
+# ---------------------------------------------------------------------------
+
+# top_restore
+# Undo the terminal changes made by cmd_top (EXIT trap).
+top_restore() {
+    [ -n "${_top_stty:-}" ] && stty "$_top_stty" 2>/dev/null
+    printf '\033[?25h\033[?1049l'
+}
+
+# cmd_top [IFACE...]
+# Redraw interface rates, shaping usage and the busiest processes every
+# second until q or Ctrl-C. Without a terminal it prints one sample and exits.
+cmd_top() {
+    ensure_binary ss
+    ensure_binary tc
+    for _i in "$@"; do
+        ensure_iface "$_i"
+        [ -d "/sys/class/net/$_i" ] || die "No such interface: $_i"
+    done
+    set_color_mode
+    _utf=0
+    utf8_locale && _utf=1
+    _limits=$(stats_limits)
+
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        _a=$(stats_snapshot 1 "$@")
+        sleep 1
+        _b=$(stats_snapshot 1 "$@")
+        printf '%s\n%s\n%s\n' "$_a" "$_b" "$_limits" | stats_render top "$COLOR_MODE" "$_utf"
+        return
+    fi
+
+    # Raw-ish input: reading one key waits at most 1s, which also paces the
+    # refresh. Draw on the alternate screen so the shell is left untouched.
+    _top_stty=$(stty -g)
+    trap top_restore EXIT
+    trap 'exit 130' INT TERM
+    stty -icanon -echo min 0 time 10
+    printf '\033[?1049h\033[?25l\033[H\033[2Jmeasuring...\n'
+    _a=$(stats_snapshot 1 "$@")
+    while :; do
+        _k=$(dd bs=1 count=1 2>/dev/null)
+        case "$_k" in q|Q) break ;; esac
+        _b=$(stats_snapshot 1 "$@")
+        printf '\033[H'
+        printf '%s\n%s\n%s\n' "$_a" "$_b" "$_limits" | \
+            stats_render top "$COLOR_MODE" "$_utf" "$(printf '\033[K')"
+        printf '\033[J'
+        _a=$_b
+    done
 }
 
 usage() {
@@ -322,6 +402,7 @@ Usage: $PROG <command> [args]
 
 Commands:
   list [iface...]                 show current tc state for configured interfaces
+  top [iface...]                  live traffic per interface and process (q to quit)
   apply [iface...]                apply limits from config (default: all)
   add <iface> <down> <up> [--ipv4-only]
                                   add/update interface limits (mbit) and apply
@@ -347,6 +428,7 @@ main() {
     _cmd=$1; shift
     case "$_cmd" in
         list)            cmd_list "$@" ;;
+        top)             cmd_top "$@" ;;
         apply)           cmd_apply "$@" ;;
         add)             cmd_add "$@" ;;
         deny)            cmd_deny "$@" ;;
