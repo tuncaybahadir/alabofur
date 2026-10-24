@@ -29,9 +29,11 @@ require_root() {
 }
 
 # Run a command; abort with its stderr on failure. Used for steps that must
-# succeed.
+# succeed. stderr is captured in a mktemp file (unique name, created 0600) so
+# a pre-planted symlink in a shared TMPDIR cannot redirect the write.
 run() {
-    _ala_errfile="${TMPDIR:-/tmp}/.alabofur.$$"
+    _ala_errfile=$(mktemp "${TMPDIR:-/tmp}/alabofur.XXXXXX") || \
+        die "cannot create temporary file"
     if ! "$@" 2>"$_ala_errfile"; then
         _ala_msg=$(cat "$_ala_errfile" 2>/dev/null)
         rm -f "$_ala_errfile"
