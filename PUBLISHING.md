@@ -1,7 +1,7 @@
 # Publishing alabofur
 
 Step-by-step guide to build, **sign** and publish alabofur on every channel:
-GitHub Releases, an apt repository, a yum/dnf repository, and the Snap Store.
+GitHub Releases, an apt repository and a yum/dnf repository.
 
 Channels and how a user installs from each:
 
@@ -10,7 +10,6 @@ Channels and how a user installs from each:
 | apt repo | `apt install alabofur` | GitHub Pages |
 | yum/dnf repo | `dnf install alabofur` | GitHub Pages |
 | GitHub Releases | download `.deb`/`.rpm` | GitHub |
-| Snap | `snap install alabofur --classic` | Snap Store |
 
 GitHub repo: `github.com/tuncaybahadir/alabofur` → Pages URL
 `https://tuncaybahadir.github.io/alabofur/`.
@@ -26,12 +25,9 @@ Local tools (Linux or WSL):
 echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
 sudo apt update
 sudo apt install -y nfpm dpkg-dev apt-utils createrepo-c gnupg
-# snap build tool
-sudo snap install snapcraft --classic
 ```
 
-Accounts: a GitHub account (the repo) and an Ubuntu One account (for the Snap
-Store, free at https://snapcraft.io).
+Accounts: a GitHub account (the repo).
 
 ---
 
@@ -121,7 +117,7 @@ sudo dnf install alabofur
 ```
 
 For every later release: bump the version (Makefile `VERSION`,
-`packaging/nfpm.yaml`, `snap/snapcraft.yaml`, `bin/alabofur`, the man page),
+`packaging/nfpm.yaml`, `bin/alabofur`, the man page),
 commit, then push a new `v*` tag.
 
 ### Build the packages locally (optional)
@@ -130,48 +126,3 @@ commit, then push a new `v*` tag.
 make deb     # -> alabofur_1.0.0_all.deb
 make rpm     # -> alabofur-1.0.0-1.noarch.rpm
 ```
-
----
-
-## Step 5 — Snap Store
-
-The snap is defined in [snap/snapcraft.yaml](snap/snapcraft.yaml). Because the
-tool runs `tc`/`ip`, loads the `ifb` module and writes a systemd unit, it needs
-**classic confinement**, which requires a one-time manual review by the Snap
-Store team.
-
-```bash
-# 5a. log in (opens a browser / token prompt)
-snapcraft login
-
-# 5b. register the name once (must be globally unique)
-snapcraft register alabofur
-
-# 5c. build the .snap (uses LXD; snapcraft sets it up on first run)
-snapcraft
-
-# 5d. request the classic confinement grant (one-time, posts to the forum)
-#     or do it via https://forum.snapcraft.io/c/store-requests
-#     Wait for approval before the snap can be released as classic.
-
-# 5e. upload and release to the stable channel
-snapcraft upload alabofur_1.0.0_amd64.snap --release=stable
-```
-
-Users then install with:
-
-```bash
-sudo snap install alabofur --classic
-```
-
-> Snap notes: classic snaps run unconfined, so `tc`/`modprobe`/systemd work as
-> on the host. `alabofur install-service` writes a unit pointing at
-> `/snap/bin/alabofur`. The version is hardcoded in `snap/snapcraft.yaml`; bump
-> it together with the other version locations.
-
-### Automating snap in CI (optional, later)
-
-Once the classic grant is approved you can publish the snap from CI too: export
-store credentials with `snapcraft export-login -` , add them as a
-`SNAPCRAFT_STORE_CREDENTIALS` secret, and add a `snapcore/action-build` +
-`snapcore/action-publish` job to the release workflow.
