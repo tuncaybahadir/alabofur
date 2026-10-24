@@ -10,10 +10,4 @@ dist/
 site/
 *.deb
 *.rpm
-*.snap
 *.tar.gz
-
-# snapcraft
-/parts/
-/stage/
-/prime/
