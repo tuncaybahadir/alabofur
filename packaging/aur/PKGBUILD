@@ -1,6 +1,6 @@
 # Maintainer: Tuncay Bahadır <tuncaybahadir@protonmail.com>
 pkgname=alabofur
-pkgver=1.0.3
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Simple bandwidth shaper with a ufw-like UX"
 arch=('any')
@@ -8,7 +8,7 @@ url="https://github.com/tuncaybahadir/alabofur"
 license=('MIT')
 depends=('iproute2' 'kmod')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/tuncaybahadir/alabofur/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('cc513b63591c4b483320e68224894f344135fc3318387b72fdab69f25f452ebd')
+sha256sums=('f1caf03419a3f9b492aff4964aeb3dadf0f31a7e73ce6aa53db9f8c922e0ce88')
 
 package() {
 	cd "$srcdir/$pkgname-$pkgver"
