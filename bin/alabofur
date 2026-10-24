@@ -7,7 +7,7 @@
 set -u
 
 PROG="alabofur"
-VERSION="1.0.1"
+VERSION="1.0.2"
 SERVICE_INSTALL_PATH="/etc/systemd/system/alabofur.service"
 
 # ---------------------------------------------------------------------------
