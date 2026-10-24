@@ -7,7 +7,7 @@ missing. Language: English.
 
 ## Supported distributions
 
-- Ubuntu 20.04+ (deb)
+- Ubuntu 20.04, 22.04, 24.04, 26.04 (deb)
 - Debian 8+ (deb)
 - Fedora 36+ (rpm)
 - RHEL/CentOS/Alma/Rocky 8+ (rpm)
