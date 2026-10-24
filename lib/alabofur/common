@@ -21,6 +21,22 @@ ensure_binary() {
     have "$1" || die "Required binary not found: $1"
 }
 
+# Test whether $1 is a safe network interface name: 1-15 characters (the
+# kernel IFNAMSIZ limit) from [A-Za-z0-9_.-], not starting with '-' and not
+# "." or "..". Such a name cannot be mistaken for a tc/ip option and cannot
+# escape the config directory when used as a file name.
+valid_iface() {
+    case "$1" in
+        ''|.|..|-*|*[!A-Za-z0-9_.-]*) return 1 ;;
+    esac
+    [ "${#1}" -le 15 ]
+}
+
+# Abort unless $1 is a valid interface name.
+ensure_iface() {
+    valid_iface "$1" || die "Invalid interface name: $1"
+}
+
 # Abort unless running as root.
 require_root() {
     if [ "$(id -u)" -ne 0 ]; then
