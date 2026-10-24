@@ -241,6 +241,80 @@ cmd_service_run() {
     apply_interfaces "$@"
 }
 
+# banner
+# Print the slanted ALABOFUR logo shown above the help text. Only drawn on a
+# UTF-8 terminal, so pipes, scripts and plain consoles get the bare usage.
+# Uses 24-bit colour when COLORTERM advertises it, else the nearest
+# 256-colour codes; NO_COLOR keeps the logo but drops the colours.
+banner() {
+    [ -t 1 ] || return 0
+    [ "${TERM:-dumb}" != "dumb" ] || return 0
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+        *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
+        *) return 0 ;;
+    esac
+    _mode=256
+    case "${COLORTERM:-}" in truecolor|24bit) _mode=24 ;; esac
+    [ -z "${NO_COLOR:-}" ] || _mode=none
+
+    awk -v mode="$_mode" '
+        function color(c) {
+            if (mode == "none") return ""
+            return (mode == "24") ? "\033[38;2;" c "m" : "\033[38;5;" c "m"
+        }
+        BEGIN {
+            # per-row block face and shadow colours, top to bottom
+            if (mode == "24") {
+                split("37;217;255 48;202;255 59;186;255 69;171;255 80;155;255 91;140;255", face, " ")
+                split("15;87;102 19;81;102 24;74;102 28;68;102 32;62;102 36;56;102", shade, " ")
+                rule = "64;179;255"
+            } else {
+                split("45 45 75 75 69 69", face, " ")
+                split("23 23 24 24 17 17", shade, " ")
+                rule = "75"
+            }
+            reset = (mode == "none") ? "" : "\033[0m"
+            width = 78
+        }
+        {
+            line = $0
+            gsub(/(█)+/, color(face[NR]) "&", line)
+            gsub(/(╗|╔|═|╝|║|╚)+/, color(shade[NR]) "&", line)
+            # shift upper rows right so the logo leans like italics
+            printf("%s%s%s\n", substr("     ", 1, 6 - NR), line, reset)
+        }
+        END {
+            printf("%s", color(rule))
+            for (i = 0; i < width; i++) printf("=")
+            printf("%s\n", reset)
+
+            # letter-spaced tagline, centred, with a cyan-to-blue gradient
+            t = "s i m p l e   b a n d w i d t h   s h a p e r"
+            n = length(t)
+            for (i = int((width - n) / 2); i > 0; i--) printf(" ")
+            for (i = 1; i <= n; i++) {
+                ch = substr(t, i, 1)
+                k = (i - 1) / (n - 1)
+                if (ch == " ")
+                    c = ""
+                else if (mode == "24")
+                    c = color(int(37 + 54 * k) ";" int(217 - 77 * k) ";255")
+                else
+                    c = color(face[1 + int(k * 5)])
+                printf("%s%s", c, ch)
+            }
+            printf("%s\n\n", reset)
+        }
+    ' <<'EOF'
+ █████╗  ██╗       █████╗  ██████╗   ██████╗  ███████╗ ██╗   ██╗ ██████╗
+██╔══██╗ ██║      ██╔══██╗ ██╔══██╗ ██╔═══██╗ ██╔════╝ ██║   ██║ ██╔══██╗
+███████║ ██║      ███████║ ██████╔╝ ██║   ██║ █████╗   ██║   ██║ ██████╔╝
+██╔══██║ ██║      ██╔══██║ ██╔══██╗ ██║   ██║ ██╔══╝   ██║   ██║ ██╔══██╗
+██║  ██║ ███████╗ ██║  ██║ ██████╔╝ ╚██████╔╝ ██║      ╚██████╔╝ ██║  ██║
+╚═╝  ╚═╝ ╚══════╝ ╚═╝  ╚═╝ ╚═════╝   ╚═════╝  ╚═╝       ╚═════╝  ╚═╝  ╚═╝
+EOF
+}
+
 usage() {
     cat <<EOF
 $PROG $VERSION - simple bandwidth shaper
@@ -270,7 +344,7 @@ EOF
 # ---------------------------------------------------------------------------
 
 main() {
-    [ "$#" -ge 1 ] || { usage >&2; exit 2; }
+    [ "$#" -ge 1 ] || { banner >&2; usage >&2; exit 2; }
     _cmd=$1; shift
     case "$_cmd" in
         list)            cmd_list "$@" ;;
@@ -287,7 +361,7 @@ main() {
         status)          require_root; systemctl_action status ;;
         service-run)     cmd_service_run "$@" ;;
         --version|-V|version) printf '%s %s\n' "$PROG" "$VERSION" ;;
-        -h|--help|help)  usage ;;
+        -h|--help|help)  banner; usage ;;
         *)               err "unknown command: $_cmd"; usage >&2; exit 2 ;;
     esac
 }
