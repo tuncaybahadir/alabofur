@@ -1,3 +1,13 @@
+alabofur (1.1.0) jammy; urgency=medium
+
+  * New `alabofur top` command: live download/upload rate per interface,
+    share of the configured limit in use, packets dropped by shaping and
+    the processes using the most TCP bandwidth (refreshed every second).
+  * The help screen now shows the live rate and configured limit of every
+    interface under the logo.
+
+ -- Tuncay Bahadır <tuncaybahadir@protonmail.com>  Sat, 24 Oct 2026 16:30:00 +0000
+
 alabofur (1.0.3) jammy; urgency=medium
 
   * Build the Launchpad PPA for Ubuntu 26.04 (resolute) as well.
