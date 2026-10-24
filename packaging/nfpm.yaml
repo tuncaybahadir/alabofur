@@ -48,6 +48,10 @@ contents:
     dst: /usr/lib/alabofur/tc
     file_info:
       mode: 0644
+  - src: lib/alabofur/stats
+    dst: /usr/lib/alabofur/stats
+    file_info:
+      mode: 0644
   - src: share/alabofur/alabofur.service
     dst: /usr/share/alabofur/alabofur.service
     file_info:
