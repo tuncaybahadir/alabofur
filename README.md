@@ -124,8 +124,11 @@ Config: /etc/alabofur/alabofur.conf plus /etc/alabofur/*.conf
   `This command must be run as root.` when not run as root.
 - **Exit codes:** `0` on success, `1`/`2` on error or bad arguments — safe to
   call from scripts.
-- **Input validation:** non-integer or missing limits are rejected before any
-  change is made.
+- **Input validation:** non-integer or missing limits, and invalid interface
+  names (1-15 characters from `A-Z a-z 0-9 _ . -`, not starting with `-`), are
+  rejected before any change is made.
+- **Root-only config:** config files are written with `umask 077` (directory
+  `0700`, files `0600`), so `list` and `configtest` need root to read them.
 
 ### Man page
 
@@ -189,10 +192,10 @@ cleared shaping for eth0
 Validate configuration (non-zero exit + a precise message on error):
 
 ```console
-$ alabofur configtest
+$ sudo alabofur configtest
 config OK
 
-$ alabofur configtest
+$ sudo alabofur configtest
 /etc/alabofur/bad.conf: section [eth0] must define download_mbit and upload_mbit
 ```
 
