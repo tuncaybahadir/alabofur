@@ -120,6 +120,7 @@ systemctl_action() {
 # ---------------------------------------------------------------------------
 
 cmd_list() {
+    check_conf_readable || return 1
     _configs=$(load_all_configs 2>/dev/null) || _configs=""
 
     if [ "$#" -eq 0 ]; then
