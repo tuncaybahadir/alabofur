@@ -102,6 +102,7 @@ Usage: alabofur <command> [args]
 
 Commands:
   list [iface...]                 show current tc state for configured interfaces
+  top [iface...]                  live traffic per interface and process (q to quit)
   apply [iface...]                apply limits from config (default: all)
   add <iface> <down> <up> [--ipv4-only]
                                   add/update interface limits (mbit) and apply
@@ -129,6 +130,9 @@ Config: /etc/alabofur/alabofur.conf plus /etc/alabofur/*.conf
 - **Input validation:** non-integer or missing limits, and invalid interface
   names (1-15 characters from `A-Z a-z 0-9 _ . -`, not starting with `-`), are
   rejected before any change is made.
+- **Live interface rates on the help screen:** on a terminal, `alabofur` and
+  `alabofur --help` sample every interface for one second and show its current
+  download/upload rate and configured limit under the logo.
 - **Root-only config:** config files are written with `umask 077` (directory
   `0700`, files `0600`), so `list` and `configtest` need root to read them.
 
@@ -174,6 +178,21 @@ $ sudo alabofur list eth0
 qdisc htb 1: root refcnt 2 r2q 10 default 0x30 ...
 qdisc sfq 30: parent 1:30 ...
 qdisc ingress ffff: parent ffff:fff1 ...
+```
+
+Watch live traffic per interface and per process (refreshed every second, `q`
+to quit). `USE` is the share of the configured limit in use, `DROPS` the
+packets dropped by shaping; traffic that is not tied to a TCP socket (UDP,
+packet headers) is shown as `(other)`:
+
+```console
+$ sudo alabofur top
+IFACE    STATE            DOWN            UP  LIMIT         USE            DROPS
+eth0     up        18.6 Mbit/s    373 kbit/s  20/5 mbit     ███████░  93%  0
+
+PROCESS                  DOWN            UP  CONNS  TOP PEER
+curl              17.9 Mbit/s      0 kbit/s      1  185.125.190.37:443
+(other)            716 kbit/s    373 kbit/s      -  -
 ```
 
 Throttle an interface to near-zero (1/1 Mbit):
