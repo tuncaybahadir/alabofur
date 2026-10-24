@@ -75,12 +75,25 @@ parse_ini() {
     ' "$@"
 }
 
+# check_conf_readable
+#
+# Fail with a hint when CONF_DIR exists but cannot be listed. Config files are
+# written root-only (see save_interface_config), so without this a non-root
+# caller would silently see an empty config set.
+check_conf_readable() {
+    if [ -d "$CONF_DIR" ] && { [ ! -r "$CONF_DIR" ] || [ ! -x "$CONF_DIR" ]; }; then
+        err "Cannot read $CONF_DIR (run as root)"
+        return 1
+    fi
+}
+
 # load_all_configs
 #
 # Load the default config file plus any *.conf under CONF_DIR (default first,
 # then the rest in sorted order). Prints merged records (see parse_ini).
 # Returns non-zero if no config files exist.
 load_all_configs() {
+    check_conf_readable || return 1
     set --
     [ -f "$DEFAULT_CONF_FILE" ] && set -- "$@" "$DEFAULT_CONF_FILE"
     if [ -d "$CONF_DIR" ]; then
@@ -125,6 +138,7 @@ save_interface_config() {
 # Validate every *.conf in CONF_DIR. Returns non-zero on any parse error.
 # An empty config set is not an error.
 configtest() {
+    check_conf_readable || return 1
     set --
     if [ -d "$CONF_DIR" ]; then
         for _f in "$CONF_DIR"/*.conf; do
