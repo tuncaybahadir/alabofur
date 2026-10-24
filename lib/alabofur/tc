@@ -43,6 +43,7 @@ install_dependencies() {
 # step ignores failure so a clean interface does not error.
 tc_clear() {
     _iface=$1
+    ensure_iface "$_iface"
     require_root
     ensure_binary tc
     ensure_binary ip
@@ -61,6 +62,7 @@ tc_clear() {
 # dedicated ifb device. IPV6 ("true"/"false") toggles the IPv6 ingress filter.
 tc_setup() {
     _iface=$1; _dl_mbit=$2; _ul_mbit=$3; _ipv6=$4
+    ensure_iface "$_iface"
     require_root
     ensure_binary tc
     ensure_binary ip
@@ -102,6 +104,7 @@ tc_setup() {
 # Print the interface's qdisc statistics (stdout or stderr of `tc -s`).
 tc_show() {
     _iface=$1
+    ensure_iface "$_iface"
     ensure_binary tc
     tc -s qdisc show dev "$_iface" 2>&1 | sed -e 's/[[:space:]]*$//'
 }
