@@ -90,6 +90,13 @@ sudo systemctl start alabofur     # apply now (install-service already enables i
 On boot the service runs `alabofur service-run`, which validates the config and
 re-applies every configured interface. `remove-service` disables and removes it.
 
+When upgrading from 1.1.0 or earlier, refresh the installed unit:
+
+```bash
+sudo alabofur install-service --force
+sudo systemctl restart alabofur
+```
+
 ## Usage
 
 `alabofur` is a command-line tool (no GUI), driven by short verb-style
@@ -111,7 +118,8 @@ Commands:
   configtest                      validate configuration files
   install-service [--force]       install systemd service
   remove-service                  remove systemd service
-  start|stop|restart|status       manage the systemd service
+  start|stop|restart|reload|status
+                                  manage the systemd service
   --version                       print version
   -h, --help                      show this help
 
@@ -123,6 +131,15 @@ Config: /etc/alabofur/alabofur.conf plus /etc/alabofur/*.conf
 - **`add` both saves and applies:** it writes the interface config and applies
   the limit immediately. Install the systemd service for the limits to be
   re-applied from config on reboot.
+- **Editing config files:** run `sudo alabofur apply` or
+  `sudo systemctl reload alabofur` afterwards. A plain `systemctl start` does
+  nothing while the service is already active; `alabofur start` re-reads the config.
+- **Precedence:** when an interface is defined in several files, `alabofur.conf`
+  wins and a warning is printed. `add`/`deny` update the file that already
+  defines the interface.
+- **`stop` removes all limits**; `restart` re-applies them from config.
+- **Independent interfaces:** a missing or failing interface does not stop the
+  others. The service waits up to 30 seconds for interfaces that appear late.
 - **Root enforcement:** commands that change limits abort with
   `This command must be run as root.` when not run as root.
 - **Exit codes:** `0` on success, `1`/`2` on error or bad arguments — safe to

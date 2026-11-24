@@ -28,7 +28,7 @@ alabofur \- simple bandwidth shaper with ufw-like UX
 .B alabofur install-service
 .RI [--force]
 .br
-.B alabofur start|stop|restart|status
+.B alabofur start|stop|restart|reload|status
 .SH DESCRIPTION
 .B alabofur
 applies upload/download limits per network interface with the same simplicity as
@@ -77,8 +77,14 @@ Install systemd unit at
 .IR /etc/systemd/system/alabofur.service
 and enable it.
 .TP
-.B start|stop|restart|status
+.B start|stop|restart|reload|status
 Manage the systemd service.
+.B start
+and
+.B reload
+re-read the configuration;
+.B stop
+removes all limits.
 .SH FILES
 .TP
 .I /etc/alabofur/alabofur.conf
@@ -89,6 +95,8 @@ and
 .TP
 .I /etc/alabofur/*.conf
 Optional per-interface configuration files.
+.I alabofur.conf
+wins when an interface is defined more than once.
 .SH AUTHOR
 Tuncay Bahadır <tuncaybahadir@protonmail.com>
 .SH SEE ALSO
