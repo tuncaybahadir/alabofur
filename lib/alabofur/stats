@@ -24,7 +24,7 @@ stats_iface_line() {
     read -r _stx < "$_sd/statistics/tx_bytes" || _stx=0
     _sdr=-
     if [ "$1" = 1 ]; then
-        _sdr=$({ tc -s qdisc show dev "$2"; tc -s qdisc show dev "ifb-$2"; } 2>/dev/null |
+        _sdr=$({ tc -s qdisc show dev "$2"; tc -s qdisc show dev "$(ifb_name "$2")"; } 2>/dev/null |
             awk '{ for (i = 1; i < NF; i++) if ($i == "(dropped") d += $(i + 1) } END { print d + 0 }')
     fi
     printf 'I\t%s\t%s\t%s\t%s\t%s\n' "$2" "$_sst" "$_srx" "$_stx" "$_sdr"

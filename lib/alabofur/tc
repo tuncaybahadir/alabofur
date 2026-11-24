@@ -25,9 +25,9 @@ install_dependencies() {
         apt-get update >/dev/null 2>&1 || true
         run apt-get install -y iproute2 kmod
     elif have dnf; then
-        run dnf install -y iproute kmod
+        run dnf install -y iproute iproute-tc kmod
     elif have yum; then
-        run yum install -y iproute kmod
+        run yum install -y iproute iproute-tc kmod
     elif have zypper; then
         run zypper --non-interactive install iproute2 kmod
     elif have pacman; then
@@ -35,6 +35,35 @@ install_dependencies() {
     else
         die "Package manager not found; install iproute2/iproute and kmod manually."
     fi
+}
+
+# ifb_name IFACE
+#
+# Name of the ifb device paired with IFACE. Names that would exceed the kernel
+# limit of 15 characters use a checksum; the full name is kept as ifalias.
+ifb_name() {
+    if [ "${#1}" -le 11 ]; then
+        printf 'ifb-%s\n' "$1"
+    else
+        printf 'ifb-%s\n' "$(printf '%s' "$1" | cksum | cut -d ' ' -f 1)"
+    fi
+}
+
+# iface_exists IFACE
+iface_exists() { [ -e "/sys/class/net/$1" ]; }
+
+# shaped_interfaces
+#
+# Print every interface that currently has an alabofur ifb device.
+shaped_interfaces() {
+    for _d in /sys/class/net/ifb-*; do
+        [ -e "$_d" ] || continue
+        _alias=$(cat "$_d/ifalias" 2>/dev/null) || _alias=
+        case "$_alias" in
+            alabofur:*) printf '%s\n' "${_alias#alabofur:}" ;;
+            *)          printf '%s\n' "${_d##*/ifb-}" ;;
+        esac
+    done
 }
 
 # tc_clear IFACE
@@ -48,7 +77,7 @@ tc_clear() {
     ensure_binary tc
     ensure_binary ip
 
-    _ifb="ifb-$_iface"
+    _ifb=$(ifb_name "$_iface")
     runq tc qdisc del dev "$_iface" root
     runq tc qdisc del dev "$_iface" ingress
     runq tc qdisc del dev "$_ifb" root
@@ -61,6 +90,17 @@ tc_clear() {
 # Apply HTB upload shaping on the interface and download shaping via a
 # dedicated ifb device. IPV6 ("true"/"false") toggles the IPv6 ingress filter.
 tc_setup() {
+    ensure_iface "$1"
+    require_root
+    iface_exists "$1" || { err "$1: interface does not exist"; return 1; }
+    # run() exits on failure; the subshell keeps that from ending the caller.
+    if ! ( tc_setup_steps "$@" ); then
+        tc_clear "$1"   # do not leave a half-configured interface behind
+        return 1
+    fi
+}
+
+tc_setup_steps() {
     _iface=$1; _dl_mbit=$2; _ul_mbit=$3; _ipv6=$4
     ensure_iface "$_iface"
     require_root
@@ -68,11 +108,12 @@ tc_setup() {
     ensure_binary ip
     ensure_binary modprobe
 
-    _ifb="ifb-$_iface"
+    _ifb=$(ifb_name "$_iface")
     tc_clear "$_iface"
 
     run modprobe ifb
     run ip link add "$_ifb" type ifb
+    run ip link set dev "$_ifb" alias "alabofur:$_iface"
     run ip link set "$_ifb" up
 
     _up="$((_ul_mbit * 1000))kbit"
