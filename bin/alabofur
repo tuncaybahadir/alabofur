@@ -46,6 +46,13 @@ fi
 # shellcheck source=lib/alabofur/stats
 . "$ALABOFUR_LIBDIR/stats"
 
+# tc/ip/modprobe live in sbin, which some root shells do not have in PATH.
+PATH="${PATH:-/usr/bin:/bin}:/usr/local/sbin:/usr/sbin:/sbin"
+export PATH
+
+# How long the service waits for interfaces that appear late during boot.
+INTERFACE_WAIT_SECONDS=30
+
 TAB=$(printf '\t')
 
 # ---------------------------------------------------------------------------
@@ -54,9 +61,11 @@ TAB=$(printf '\t')
 
 # apply_interfaces [IFACE...]
 # Apply shaping for the given interfaces, or all configured ones when none
-# are given. Errors if a requested interface is not in the config.
+# are given. Errors if a requested interface is not in the config. A failing
+# interface does not stop the others.
 apply_interfaces() {
     _configs=$(load_all_configs) || return 1
+    warn_duplicates
 
     if [ "$#" -gt 0 ]; then
         _missing=
@@ -73,6 +82,7 @@ apply_interfaces() {
 
     _rc=0
     printf '%s\n' "$_configs" | {
+        _fail=0
         while IFS="$TAB" read -r iface dl ul ipv6; do
             [ -n "$iface" ] || continue
             if [ "$#" -gt 0 ]; then
@@ -82,9 +92,13 @@ apply_interfaces() {
                 done
                 [ "$_match" -eq 1 ] || continue
             fi
-            tc_setup "$iface" "$dl" "$ul" "$ipv6"
-            printf 'applied %s: down=%smbit up=%smbit\n' "$iface" "$dl" "$ul"
+            if tc_setup "$iface" "$dl" "$ul" "$ipv6"; then
+                printf 'applied %s: down=%smbit up=%smbit\n' "$iface" "$dl" "$ul"
+            else
+                _fail=1
+            fi
         done
+        exit "$_fail"
     } || _rc=$?
     return $_rc
 }
@@ -102,7 +116,8 @@ install_service() {
         die "$SERVICE_INSTALL_PATH already exists (use --force to overwrite)"
     fi
 
-    _bin=$(command -v alabofur 2>/dev/null || echo "$_self")
+    # the running script, not whatever alabofur comes first in PATH
+    _bin=$_self
     sed "s#@ALABOFUR_BIN@#$_bin#g" "$_template" > "$SERVICE_INSTALL_PATH"
     runq systemctl daemon-reload
     runq systemctl enable alabofur.service
@@ -123,7 +138,8 @@ systemctl_action() {
 
 cmd_list() {
     check_conf_readable || return 1
-    _configs=$(load_all_configs 2>/dev/null) || _configs=""
+    _configs=$(load_all_configs) || _configs=""
+    warn_duplicates
 
     if [ "$#" -eq 0 ]; then
         set --
@@ -145,7 +161,10 @@ cmd_list() {
             _dl=$(printf '%s' "$_rec" | cut -f2)
             _ul=$(printf '%s' "$_rec" | cut -f3)
             _v6=$(printf '%s' "$_rec" | cut -f4)
-            printf '[%s] configured: down=%smbit up=%smbit ipv6=%s\n' "$_iface" "$_dl" "$_ul" "$_v6"
+            _active=no
+            iface_exists "$(ifb_name "$_iface")" && _active=yes
+            printf '[%s] configured: down=%smbit up=%smbit ipv6=%s active=%s\n' \
+                "$_iface" "$_dl" "$_ul" "$_v6" "$_active"
         else
             printf '[%s] not in config; showing tc state\n' "$_iface"
         fi
@@ -178,10 +197,13 @@ cmd_add() {
     fi
     ensure_iface "$_iface"
     case "$_dl$_ul" in *[!0-9]*) die "download and upload must be integers (mbit)";; esac
+    if [ "$_dl" -lt 1 ] || [ "$_ul" -lt 1 ]; then
+        die "download and upload must be greater than 0"
+    fi
 
     install_dependencies || return 1
-    save_interface_config "$_iface" "$_dl" "$_ul" "$_ipv6" >/dev/null
-    printf 'saved config %s at %s\n' "$_iface" "$CONF_DIR"
+    _saved=$(save_interface_config "$_iface" "$_dl" "$_ul" "$_ipv6") || return 1
+    printf 'saved config %s at %s\n' "$_iface" "$_saved"
     apply_interfaces "$_iface"
 }
 
@@ -208,6 +230,7 @@ cmd_clear() {
 
 cmd_configtest() {
     if configtest; then
+        warn_duplicates
         printf 'config OK\n'
         return 0
     fi
@@ -240,7 +263,64 @@ cmd_remove_service() {
 cmd_service_run() {
     # entry point invoked by the systemd unit
     configtest || return 1
-    apply_interfaces "$@"
+    [ "$#" -eq 0 ] || { apply_interfaces "$@"; return; }
+
+    _all=$(load_all_configs | cut -f1) || return 1
+    [ -n "$_all" ] || return 1
+    # drop limits of interfaces that are no longer configured
+    for _i in $(shaped_interfaces); do
+        printf '%s\n' "$_all" | grep -qxF -e "$_i" || clear_and_report "$_i"
+    done
+
+    # apply what is there, then wait for interfaces that appear late
+    _pending=$_all; _ok=0; _rc_run=0; _waited=0
+    while :; do
+        _ready=; _late=
+        for _i in $_pending; do
+            if iface_exists "$_i"; then _ready="$_ready $_i"; else _late="$_late $_i"; fi
+        done
+        if [ -n "$_ready" ]; then
+            _ok=1
+            # shellcheck disable=SC2086
+            apply_interfaces $_ready || _rc_run=1
+        fi
+        _pending=$_late
+        [ -n "$_pending" ] || break
+        [ "$_waited" -lt "$INTERFACE_WAIT_SECONDS" ] || break
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    for _i in $_pending; do
+        err "$_i: interface did not appear, skipped"
+    done
+    [ "$_ok" -eq 1 ] || return 1
+    return "$_rc_run"
+}
+
+clear_and_report() {
+    tc_clear "$1"
+    printf 'cleared shaping for %s\n' "$1"
+}
+
+cmd_service_stop() {
+    # ExecStop of the systemd unit: remove every limit set by alabofur
+    for _i in $(shaped_interfaces); do
+        clear_and_report "$_i"
+    done
+}
+
+cmd_start() {
+    # A oneshot unit stays active, so a plain start would not re-read the config.
+    require_root
+    systemctl_action reload-or-restart
+}
+
+cmd_stop() {
+    require_root
+    _rc=0
+    systemctl_action stop || _rc=$?
+    cmd_service_stop    # systemd skips ExecStop when the unit has failed
+    return "$_rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -411,7 +491,8 @@ Commands:
   configtest                      validate configuration files
   install-service [--force]       install systemd service
   remove-service                  remove systemd service
-  start|stop|restart|status       manage the systemd service
+  start|stop|restart|reload|status
+                                  manage the systemd service
   --version                       print version
   -h, --help                      show this help
 
@@ -436,11 +517,13 @@ main() {
         configtest)      cmd_configtest "$@" ;;
         install-service) cmd_install_service "$@" ;;
         remove-service)  cmd_remove_service "$@" ;;
-        start)           require_root; systemctl_action start ;;
-        stop)            require_root; systemctl_action stop ;;
+        start)           cmd_start ;;
+        stop)            cmd_stop ;;
         restart)         require_root; systemctl_action restart ;;
+        reload)          require_root; systemctl_action reload ;;
         status)          require_root; systemctl_action status ;;
         service-run)     cmd_service_run "$@" ;;
+        service-stop)    cmd_service_stop ;;
         --version|-V|version) printf '%s %s\n' "$PROG" "$VERSION" ;;
         -h|--help|help)  banner; usage ;;
         *)               err "unknown command: $_cmd"; usage >&2; exit 2 ;;

@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=@ALABOFUR_BIN@ service-run
+ExecReload=@ALABOFUR_BIN@ service-run
+ExecStop=@ALABOFUR_BIN@ service-stop
 RemainAfterExit=yes
 
 [Install]
