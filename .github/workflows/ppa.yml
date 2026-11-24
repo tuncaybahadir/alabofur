@@ -1,0 +1,78 @@
+name: ppa
+
+# Sign the source packages of a released tag and upload them to the Launchpad
+# PPA. Started by hand; with upload=false it only builds and signs.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Released version without the v prefix (e.g. 1.1.1)"
+        required: true
+      upload:
+        description: "Upload to Launchpad"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ppa
+  cancel-in-progress: false
+
+env:
+  PPA: ppa:tuncaybahadirr/alabofur
+  SIGNING_KEY: E09A143B602B0B72F176ED2396EEAE6E842F811F
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  ppa:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          path: src
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y debhelper devscripts dput-ng
+
+      - name: Build source packages
+        run: |
+          set -eu
+          [ "$(cd src && dpkg-parsechangelog -S Version)" = "$VERSION" ]
+          for s in focal:20.04 jammy:22.04 noble:24.04 resolute:26.04; do
+            series=${s%:*}; release=${s#*:}
+            mkdir -p "build/$series"
+            cp -r src "build/$series/alabofur-$VERSION"
+            cd "build/$series/alabofur-$VERSION"
+            rm -rf .git .github
+            chmod +x debian/rules
+            sed -i "1s/.*/alabofur ($VERSION~$release) $series; urgency=medium/" debian/changelog
+            dpkg-buildpackage -S -us -uc -d
+            cd - >/dev/null
+          done
+
+      - name: Sign source packages
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -eu
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          cat > "$RUNNER_TEMP/gpg-sign" <<'EOF'
+          #!/bin/sh
+          printf '%s' "$GPG_PASSPHRASE" > "$RUNNER_TEMP/pass"
+          exec gpg --batch --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/pass" "$@"
+          EOF
+          chmod 700 "$RUNNER_TEMP/gpg-sign"
+          umask 077
+          debsign -p"$RUNNER_TEMP/gpg-sign" -k"$SIGNING_KEY" build/*/*_source.changes
+          rm -f "$RUNNER_TEMP/pass"
+          for f in build/*/*.dsc build/*/*_source.changes; do gpg --verify "$f"; done
+
+      - name: Upload to Launchpad
+        if: ${{ inputs.upload }}
+        run: |
+          set -eu
+          for f in build/*/*_source.changes; do dput "$PPA" "$f"; done
