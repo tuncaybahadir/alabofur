@@ -19,7 +19,7 @@ DEFAULT_CONF_FILE="$CONF_DIR/alabofur.conf"
 # earlier ones. Emits one tab-separated record per interface:
 #     <iface>\t<download_mbit>\t<upload_mbit>\t<ipv6:true|false>
 # Validates that each section is a valid interface name (see valid_iface) and
-# that download_mbit/upload_mbit are present integers; on any validation error
+# that download_mbit/upload_mbit are present positive integers; on any validation error
 # it writes a message to stderr and returns non-zero.
 parse_ini() {
     awk '
@@ -38,6 +38,10 @@ parse_ini() {
             sub(/\].*$/, "", s)
             cur = trim(s)
             if (!(cur in seen)) { order[++n] = cur; seen[cur] = 1 }
+            # a later file replaces the whole section, not single keys
+            if (cur in file && file[cur] != FILENAME) {
+                delete dl[cur]; delete ul[cur]; delete v6[cur]
+            }
             file[cur] = FILENAME
             next
         }
@@ -46,7 +50,8 @@ parse_ini() {
             key = line; val = line
             sub(/=.*$/, "", key)
             sub(/^[^=]*=/, "", val)
-            key = trim(key); val = trim(val)
+            sub(/[ \t]+[#;].*$/, "", val)   # inline comment
+            key = tolower(trim(key)); val = trim(val)
             if (key == "download_mbit")    dl[cur] = val
             else if (key == "upload_mbit") ul[cur] = val
             else if (key == "ipv6")        v6[cur] = val
@@ -63,12 +68,12 @@ parse_ini() {
                     printf("%s: section [%s] must define download_mbit and upload_mbit\n", file[s], s) > "/dev/stderr"
                     rc = 1; continue
                 }
-                if (dl[s] !~ /^[0-9]+$/ || ul[s] !~ /^[0-9]+$/) {
-                    printf("%s: section [%s] download_mbit/upload_mbit must be integers\n", file[s], s) > "/dev/stderr"
+                if (dl[s] !~ /^[0-9]+$/ || ul[s] !~ /^[0-9]+$/ || dl[s] + 0 < 1 || ul[s] + 0 < 1) {
+                    printf("%s: section [%s] download_mbit/upload_mbit must be positive integers (mbit, without a unit)\n", file[s], s) > "/dev/stderr"
                     rc = 1; continue
                 }
                 b = (s in v6) ? norm_bool(v6[s]) : "true"
-                printf("%s\t%s\t%s\t%s\n", s, dl[s], ul[s], b)
+                printf("%s\t%d\t%d\t%s\n", s, dl[s], ul[s], b)
             }
             if (rc) exit 3
         }
@@ -89,13 +94,12 @@ check_conf_readable() {
 
 # load_all_configs
 #
-# Load the default config file plus any *.conf under CONF_DIR (default first,
-# then the rest in sorted order). Prints merged records (see parse_ini).
+# Load every *.conf under CONF_DIR in sorted order and the default config file
+# last, so that alabofur.conf wins. Prints merged records (see parse_ini).
 # Returns non-zero if no config files exist.
 load_all_configs() {
     check_conf_readable || return 1
     set --
-    [ -f "$DEFAULT_CONF_FILE" ] && set -- "$@" "$DEFAULT_CONF_FILE"
     if [ -d "$CONF_DIR" ]; then
         for _f in "$CONF_DIR"/*.conf; do
             [ -e "$_f" ] || continue
@@ -103,6 +107,7 @@ load_all_configs() {
             set -- "$@" "$_f"
         done
     fi
+    [ -f "$DEFAULT_CONF_FILE" ] && set -- "$@" "$DEFAULT_CONF_FILE"
     if [ "$#" -eq 0 ]; then
         err "No config files found in $CONF_DIR"
         return 1
@@ -110,14 +115,77 @@ load_all_configs() {
     parse_ini "$@"
 }
 
+# config_sources
+#
+# Print "<iface>\t<file>" for every section, lowest to highest precedence.
+config_sources() {
+    set --
+    for _f in "$CONF_DIR"/*.conf; do
+        [ -f "$_f" ] || continue
+        [ "$_f" = "$DEFAULT_CONF_FILE" ] && continue
+        set -- "$@" "$_f"
+    done
+    [ -f "$DEFAULT_CONF_FILE" ] && set -- "$@" "$DEFAULT_CONF_FILE"
+    [ "$#" -gt 0 ] || return 0
+    awk '/^[ \t]*\[/ {
+            s = $0; sub(/^[ \t]*\[/, "", s); sub(/\].*$/, "", s)
+            gsub(/^[ \t\r]+|[ \t\r]+$/, "", s)
+            printf("%s\t%s\n", s, FILENAME)
+        }' "$@"
+}
+
+# warn_duplicates
+#
+# Warn on stderr about interfaces that are defined in more than one file.
+warn_duplicates() {
+    [ -r "$CONF_DIR" ] || return 0
+    config_sources | awk -F '\t' '
+        !($1 in last) { last[$1] = $2; next }
+        last[$1] != $2 {
+            old[$1] = old[$1] (old[$1] == "" ? "" : ", ") last[$1]; last[$1] = $2
+        }
+        END {
+            for (i in old)
+                printf("warning: [%s] is defined in several files; using %s, ignoring %s\n", i, last[i], old[i])
+        }' >&2
+}
+
 # save_interface_config IFACE DOWNLOAD UPLOAD IPV6
 #
-# Write a per-interface config file at CONF_DIR/<iface>.conf and print its path.
+# Update the interface in the file whose definition is in effect (comments and
+# other sections are kept), else create CONF_DIR/<iface>.conf. Prints the path.
 # Runs under umask 077 so a new CONF_DIR is 0700 and the file 0600 regardless
 # of the caller's umask; an existing file is tightened to 0600 as well.
 save_interface_config() {
     _iface=$1; _dl=$2; _ul=$3; _ipv6=$4
     ensure_iface "$_iface"
+    _path=$(config_sources | awk -F '\t' -v w="$_iface" '$1 == w { p = $2 } END { print p }')
+    if [ -n "$_path" ]; then
+        (
+            umask 077
+            _tmp=$(mktemp "$CONF_DIR/.alabofur.XXXXXX") || exit 1
+            awk -v want="$_iface" -v dl="$_dl" -v ul="$_ul" -v v6="$_ipv6" '
+                /^[ \t]*\[/ {
+                    s = $0; sub(/^[ \t]*\[/, "", s); sub(/\].*$/, "", s)
+                    gsub(/^[ \t\r]+|[ \t\r]+$/, "", s)
+                    inside = (s == want)
+                    print
+                    if (inside && !done) {
+                        printf("download_mbit = %s\nupload_mbit = %s\nipv6 = %s\n", dl, ul, v6)
+                        done = 1
+                    }
+                    next
+                }
+                inside && tolower($0) ~ /^[ \t]*(download_mbit|upload_mbit|ipv6)[ \t]*=/ { next }
+                { print }
+            ' "$_path" > "$_tmp" && cat "$_tmp" > "$_path" && chmod 0600 "$_path"
+            _st=$?
+            rm -f "$_tmp"
+            exit "$_st"
+        ) || die "cannot write $_path"
+        printf '%s\n' "$_path"
+        return 0
+    fi
     _path="$CONF_DIR/$_iface.conf"
     (
         umask 077
