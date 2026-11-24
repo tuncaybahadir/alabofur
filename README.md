@@ -103,7 +103,7 @@ sudo systemctl restart alabofur
 subcommands just like `ufw`:
 
 ```
-alabofur 1.1.0 - simple bandwidth shaper
+alabofur 1.1.1 - simple bandwidth shaper
 
 Usage: alabofur <command> [args]
 

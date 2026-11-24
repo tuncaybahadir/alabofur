@@ -1,3 +1,21 @@
+alabofur (1.1.1) jammy; urgency=medium
+
+  * Limits set in alabofur.conf are no longer silently overridden by files
+    written by `add`/`deny`; alabofur.conf wins and duplicates are reported.
+  * `add` and `deny` update the file that already defines the interface.
+  * A missing or failing interface no longer prevents the others from being
+    limited, and no half-configured ifb device is left behind.
+  * Service: add reload, remove limits on stop, wait for late interfaces and
+    use the path of the installed script. Run `alabofur install-service
+    --force` after upgrading to refresh the unit.
+  * Reject zero limits, accept inline comments in config files.
+  * Support interface names longer than 11 characters.
+  * Install iproute-tc on Fedora/RHEL, where tc is a separate package.
+  * Depend on gawk in the rpm, which minimal openSUSE installs lack.
+  * Find tc/ip/modprobe when sbin is not in PATH.
+
+ -- Tuncay Bahadır <tuncaybahadir@protonmail.com>  Tue, 24 Nov 2026 22:00:00 +0000
+
 alabofur (1.1.0) jammy; urgency=medium
 
   * New `alabofur top` command: live download/upload rate per interface,
