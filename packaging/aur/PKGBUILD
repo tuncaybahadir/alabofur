@@ -6,7 +6,7 @@ pkgdesc="Simple bandwidth shaper with a ufw-like UX"
 arch=('any')
 url="https://github.com/tuncaybahadir/alabofur"
 license=('MIT')
-depends=('iproute2' 'kmod')
+depends=('iproute2' 'kmod' 'gawk')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/tuncaybahadir/alabofur/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('f1caf03419a3f9b492aff4964aeb3dadf0f31a7e73ce6aa53db9f8c922e0ce88')
 

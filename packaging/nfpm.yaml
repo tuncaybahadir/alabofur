@@ -24,12 +24,13 @@ depends:
 overrides:
   rpm:
     # Rich/boolean dep so it resolves across rpm families: Fedora/RHEL ship tc in
-    # `iproute`, openSUSE in `iproute2`. (A file dep on /usr/sbin/tc fails on
+    # `iproute-tc`, openSUSE in `iproute2`. (A file dep on /usr/sbin/tc fails on
     # Fedora's dnf5, which does not load filelists metadata by default.) `kmod`
     # is named the same on both.
     depends:
-      - (iproute or iproute2)
+      - (iproute-tc or iproute2)
       - kmod
+      - gawk
 
 contents:
   - src: bin/alabofur
